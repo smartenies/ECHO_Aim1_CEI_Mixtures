@@ -1,0 +1,340 @@
+---
+title: "BKMR model for birth weight"
+author: "Sheena Martenies"
+date: "2/24/2020"
+output: html_document
+---
+
+This document summarizes the prelimiary results of the Bayesian Kernel Machine Regression (BKMR) model for birth weight. The analysis builds on the original CEI paper, where we developed an index to characterize combined exposures to environmental and social determinants of health and their associations with birth weight and adiposity at birth in the Healthy Start cohort. 
+
+Here I am presenting the results of the preliminary BKMR model for birth weight.
+
+For this analysis, we take a subset of those predictors (as selected using the NPS algorithm) and fit a BKMR model to assess independent and joint effects of the exposures. When implementing the NPB model, We used a (conservative) PIP of 0.25 determine which exposures would carry over to the BKMR model. The NPB model selected 9 of the original 19 exposures: mean PM~2.5~, percent impervious surfaces, distance to mines or oil and gas wells, cardiovascular hospitalization rates, respiratory hospitalization rates, property crime rates, the percentage of the population with less than a high school diploma, the percentage of the civilian workforce population that was unemployed, and the percentage of households living in poverty.
+
+Prior to fitting the BKMR model, the outcome, exposure, and individual-level covariates (based on the literature and the previous CEI paper) were scaled.
+
+Of the original 1410 mother-child pairs in the cohort, we have complete data for 780 (55%) pairs.
+
+### Results summary
+
+The results so far suggest:
+
+- the overall mixture has an inverse relationship with birth weight, where higher exposures are associated with lower birth weight
+- the three exposures with the highest PIPs are respiratory hospitalization rates (PIP = 0.41), percentage of households in poverty (PIP = 0.38), and percent impervious surface (PIP = 0.35)
+- Some of the exposures displayed (potenitally) non-linear exposure-response curves (including PM2.5 and property crime rates) though these were not the most important exposures
+- The effects of individual exposures were influenced by the other exposures (evidence of effect modification?)
+- The stongest relationship with birth weight was observed for respiratory hospitalization rates
+- There was little evidence of interations?
+
+```{r , include = FALSE, echo = F}
+knitr::opts_chunk$set(echo = T)
+
+#' =============================================================================
+#' Project: ECHO Aim 1 CEI BKMR Anayysis
+#' Author: Sheena Martenies
+#' Contact: Sheena.Martenies@colostate.edu
+#' 
+#' This project is a follow up the the CEI paper (Env Epi, 2018). Here we're 
+#' using BKMR to identify which exposures are driving the associations reported
+#' in that original paper
+#' 
+#' Date Created: October 21, 2019
+#' 
+#' Description: Using Jennifer Bobb's package to run the BKMR 
+#' =============================================================================
+
+library(sf)
+library(raster)
+library(ggplot2)
+library(ggthemes)
+library(stringr)
+library(tidyverse)
+library(lubridate)
+library(readxl)
+library(viridis)
+library(bkmr)
+
+#' For ggplots
+simple_theme <- theme(
+  #aspect.ratio = 1,
+  text  = element_text(family="Calibri",size = 12, color = 'black'),
+  panel.spacing.y = unit(0,"cm"),
+  panel.spacing.x = unit(0.25, "lines"),
+  panel.grid.minor = element_line(color = "transparent"),
+  panel.grid.major = element_line(color = "transparent"),
+  panel.border=element_rect(fill = NA),
+  panel.background=element_blank(),
+  axis.ticks = element_line(colour = "black"),
+  axis.text = element_text(color = "black", size=10),
+  # legend.position = c(0.1,0.1),
+  plot.margin=grid::unit(c(0,0,0,0), "mm"),
+  legend.key = element_blank()
+)
+windowsFonts(Calibri=windowsFont("TT Calibri"))
+options(scipen = 9999) #avoid scientific notation
+
+geo_data <- "R:/RSTOR-Magzamen/Research/Secondary_Data/ACS_Geodatabases/"
+utm_13 <- "+init=epsg:26913"
+albers <- "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
+ll_nad83 <- "+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0"
+ll_wgs84 <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+
+#' Read in the dataset and get the exposures, outcome and covariates
+
+#' Read in the clean dataset
+hs_data <- read_csv(here::here("Data", "HS_Clean_Data.csv"))
+nrow(hs_data)
+
+hs_data2 <- filter(hs_data, include == 1) %>% 
+  select(
+    #' Exposures
+         mean_pm, mean_o3, pct_tree_cover, pct_impervious,
+         mean_aadt_intensity, dist_m_tri:dist_m_mine_well, 
+         cvd_rate_adj, res_rate_adj, violent_crime_rate, property_crime_rate,
+         pct_less_hs, pct_unemp, pct_limited_eng, pct_hh_pov,
+         
+    #' Covariates     
+         latina_re, black_re, other_re, 
+         ed_no_hs, ed_hs, ed_aa, ed_4yr, 
+         low_bmi, ovwt_bmi, obese_bmi,
+         maternal_age, any_smoker, smokeSH, mean_cpss, mean_epsd,
+         male, gest_age_w, days_to_peapod,
+    
+    #' Outcome 
+         birth_weight, adiposity) %>% 
+  na.omit()
+nrow(hs_data2)
+
+#' What percentage of participants do we have in this analysis?
+nrow(hs_data2)/ nrow(hs_data)
+
+#' -----------------------------------------------------------------------------
+#' Bayesian Kernel Machine Regression: Birth weight
+#' Use just the variables selected by the NPB model (PIP > .25)
+#' -----------------------------------------------------------------------------
+
+#' Which variables should we consider?
+load(here::here("Results", "NPB_Models_BW.rdata"))
+exp_names
+
+hs_data3 <- select(hs_data2, exp_names,
+              #' Covariates
+                  latina_re, black_re, other_re,
+                  ed_no_hs, ed_hs, ed_aa, ed_4yr,
+                  low_bmi, ovwt_bmi, obese_bmi,
+                  maternal_age, any_smoker, smokeSH, mean_cpss, mean_epsd,
+                  male, gest_age_w, days_to_peapod,
+
+              #' Outcome
+                  birth_weight)
+names(hs_data3)
+
+ncol(hs_data2)
+ncol(hs_data3)
+
+
+set.seed(123)
+
+#' Basic version of the model with component-wise variable selection (no heirarchy)
+#' Fit the BKMR model using the kmbayes() function
+#' Uses an Markov chain Monte Carlo algorithm, so you need to specify the no.
+#' of iterations (10,000 is pretty standard)
+#' y is vector of outcomes
+#' Z is matrix of exposures
+#' X is matrix of covariates (each column = one variable)
+#' verbose = T means print each interim output
+#' varsel = T means conduct variable selection
+
+y <- hs_data3$birth_weight
+Z <- as.matrix(select(hs_data3, exp_names))
+X <- as.matrix(select(hs_data3, latina_re, black_re, other_re, 
+                      ed_no_hs, ed_hs, ed_aa, ed_4yr, 
+                      low_bmi, ovwt_bmi, obese_bmi,
+                      maternal_age, any_smoker, smokeSH, mean_cpss, mean_epsd,
+                      male, gest_age_w, days_to_peapod))
+
+#' Scale these variables
+y.scaled <- scale(y)
+Z.scaled <- apply(Z, 2, scale)
+
+X.s <- apply(X[,c(11, 14, 15, 17, 18)], 2, scale) #' just the continuous ones
+
+X.scaled <- cbind(X[,1:10], X.s[,1],
+                  X[,12:13], X.s[,2:3],
+                  X[,16], X.s[,4:5])
+colnames(X.scaled)
+colnames(X.scaled)[c(11,16)] <- c("maternal_age", "male")
+```
+
+### Data exploration
+
+Is there sufficient variability in the exposures and covariates? What does the outcome (birth weight) look like?
+```{r , include = T, echo = T}
+var(Z.scaled)
+var(X.scaled)
+
+hist(y, main = "Birth weight (unscaled)")
+hist(y.scaled, main = "Birth weight (scaled)")
+```
+
+### Model fitting
+
+Fitting the BKMR model and investigating model convergence
+
+```{r , include = FALSE, echo = T}
+# Fit the BKMR model using the scaled variables
+# fitkm.1 <- kmbayes(y = y.scaled, Z = Z.scaled, X = X.scaled, iter = 10000, 
+#                  verbose = FALSE, varsel = TRUE)
+
+#' Save current results
+# save(fitkm.1, y, y.scaled, Z, Z.scaled, X, X.scaled,
+#      file = here::here("Results", "BKMR_Model_BW.rdata"))
+
+load(file = here::here("Results", "BKMR_Model_BW.rdata"))
+load(file = here::here("Results", "BKMR_Model_BW_Results.rdata"))
+```
+
+```{r , include = T, echo = F}
+fitkm.1
+names(fitkm.1)
+
+TracePlot(fit = fitkm.1, par = "beta")
+TracePlot(fit = fitkm.1, par = "sigsq.eps")
+TracePlot(fit = fitkm.1, par = "r", comp = 1)
+```
+
+What do the posterior inclusion probabilities (PIPs) look like?
+
+```{r , include = T, echo = F}
+#' Show the estimated posterior inclusion probabilities
+#' PIPs are the proportion of iterations that include the predictor
+#' Higher PIP means higher chance of it being in the model
+
+arrange(ExtractPIPs(fitkm.1), desc(PIP))
+```
+
+How does h(z) compare when using the three different approaches?
+
+```{r , include = F, echo = T}
+#' Estimate h(z) using three different approaches
+#' Need to specify at what level of exposure we are estimating h(z)
+#' Using median exposures for now
+
+# med_vals <- apply(Z.scaled, 2, median) #' medians for all exposures -->
+# med_vals
+
+# Znew <- matrix(med_vals, nrow = 1) #' matrix of exposure medians --> -->
+# Znew
+
+#' Approach 1: estimates the posterior mean as μh(θ^) and the posterior variance 
+#' as Vh(θ^) where θ^ is the posterior mean estimate of θ. 
+
+# h_est1 <- ComputePostmeanHnew(fitkm.1, Znew = Znew, method = "approx")
+# h_est1
+
+#' Approach 2: estimates the posterior mean as E[μh(θ)] by taking the mean of 
+#' posterior samples of μh(θ), and the posterior variance as E[Vh(θ)]+Var[μh(θ)] 
+#' by taking the mean of the posterior samples of Vh(θ) and the variance of the 
+#' posterior samples of μh(θ) and them summing these quantities. 
+
+# h_est2 <- ComputePostmeanHnew(fitkm.1, Znew = Znew, method = "exact")
+# h_est2
+
+#' Approach 3: Approach 3: generates posterior samples of h(z) by sampling 
+#' h∼N(μh(θ),Vh(θ)), given particular samples of θ from the fitted BKMR model
+#' NOTE: This is the slowest version but it allows you to estimate the full
+#' posterior distribution of h(z)
+
+# Xnew <- matrix(0, nrow = 1, ncol = ncol(X))
+# samps3 <- SamplePred(fitkm.1, Znew = Znew, Xnew = Xnew)
+
+#' Compare the three results
+# h_est_compare <- data.frame(
+#   method = c(1:3),
+#   post_mean = c(h_est1$postmean, h_est2$postmean, mean(samps3)),
+#   post_sd = c(sqrt(h_est1$postvar), sqrt(h_est2$postvar), sd(samps3))
+# )
+# h_est_compare
+```
+
+```{r , include = T, echo = T}
+h_est_compare
+```
+
+### Summarizing the BKMR model
+
+Summarize the BKMR model output: Exposure-response curves for each exposure while holding the others at their 25th, 50th, or 75th percentiles
+
+```{r , include = T, echo = F}
+
+#' Then, plot using ggplot
+ggplot(pred.resp.univar.50, aes(z, est, ymin = est - 1.96*se, ymax = est + 1.96*se)) + 
+  geom_smooth(stat = "identity") + 
+  facet_wrap(~ variable) +
+  ylab("h(z) holding other variables at 50th percentile")
+
+ggplot(pred.resp.univar.25, aes(z, est, ymin = est - 1.96*se, ymax = est + 1.96*se)) + 
+  geom_smooth(stat = "identity") + 
+  facet_wrap(~ variable) +
+  ylab("h(z) holding other variables at 25th percentile")
+
+ggplot(pred.resp.univar.75, aes(z, est, ymin = est - 1.96*se, ymax = est + 1.96*se)) + 
+  geom_smooth(stat = "identity") + 
+  facet_wrap(~ variable) +
+  ylab("h(z) holding other variables at 75th percentile")
+```
+
+Summarize the BKMR model output: Bivariate relationships between two predictors while holding the others at their 25th, 50th, or 75th percentiles
+
+```{r , include = T, echo = F}
+ggplot(pred.resp.bivar.50, aes(z1, z2, fill = est)) + 
+  geom_raster() + 
+  facet_grid(variable2 ~ variable1) +
+  scale_fill_viridis() +
+  # scale_fill_gradientn(colours=c("#0000FFFF","#FFFFFFFF","#FF0000FF")) +
+  xlab("expos1") +
+  ylab("expos2") +
+  ggtitle("h(expos1, expos2)")
+
+ggplot(pred.resp.bivar.levels.50, aes(z1, est)) + 
+  geom_smooth(aes(col = quantile), stat = "identity") + 
+  facet_grid(variable2 ~ variable1) +
+  scale_color_viridis(discrete = T) +
+  ggtitle("h(expos1 | quantiles of expos2)") +
+  xlab("expos1")
+ggsave(filename = here::here("Figs", "h(x1, quant x2) holding other vars at 50th.jpeg"),
+       device = "jpeg", height = 8, width = 8, units = "in")
+```
+
+Summarize the BKMR model output: plotting the overall effect size for each percentile relative to the 50th percentile
+
+```{r , include = T, echo = F}
+
+ggplot(risks.overall, aes(quantile, est, ymin = est - 1.96*sd, ymax = est + 1.96*sd)) + 
+  xlab("Exposure quantile") +
+  ylab("Effect estimate") +
+  geom_pointrange()
+```
+
+Summarize the BKMR model output: Estimate the risks for the individual variables the exposure is at the 75th percentile relative to the 25th percentile (essentially an IQR increase), holding all other exposures at the 25th, 50th, and 75th percentiles
+
+```{r , include = T, echo = F}
+
+ggplot(risks.singvar, aes(variable, est, ymin = est - 1.96*sd, 
+                          ymax = est + 1.96*sd, col = q.fixed)) + 
+  scale_color_viridis(discrete = T) +
+  geom_pointrange(position = position_dodge(width = 0.75)) + 
+  coord_flip()
+```
+
+Checking for interation: by how much do the effect sizes for each expsoure change when we increase all the other exposures from the 25th to the 75th percentiles
+
+```{r , include = T, echo = F}
+
+ggplot(risks.int, aes(variable, est, ymin = est - 1.96*sd, 
+                      ymax = est + 1.96*sd, col = variable)) + 
+  scale_color_viridis(discrete = T) +
+  geom_pointrange(position = position_dodge(width = 0.75)) + 
+  coord_flip()
+```
+
