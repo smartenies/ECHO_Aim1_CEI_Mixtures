@@ -99,7 +99,7 @@ hs_data2 <- hs_data %>%
 #' Indicator variable if the participant can be included
 #' -----------------------------------------------------------------------------
 
-load(here::here("Data", "hs_exposures.RData"))
+load(here::here("Data", "hs_exp_vars.RData"))
 hs_data2 <- left_join(hs_data2, hs, by = "pid")
 
 exp_pids <- unique(hs$pid)
@@ -272,87 +272,87 @@ hs_data2 <- left_join(hs_data2, hs_ll, by = "pid")
 
 write_csv(hs_data2, here::here("Data", "HS_Clean_Data.csv"))
 
-#' -----------------------------------------------------------------------------
-#' Compare included and excluded participants
-#' -----------------------------------------------------------------------------
-
-#' Do geocoded HS participants with exposure data differ from those excluded?
-#' Chi square test for categorical variables, Student's t for continuous
-hs_inc <- filter(hs_data2, include == 1)
-hs_exc <- filter(hs_data2, include == 0)
-
-#' Maternal race/ethnicity
-table(hs_data2$maternal_race_eth, hs_data2$include)
-chisq.test(hs_data2$maternal_race_eth, hs_data2$include)
-pairwise.prop.test(table(hs_data2$maternal_race_eth, hs_data2$include))
-
-#' Maternal age at delivery
-t.test(hs_inc$maternal_age, hs_exc$maternal_age)
-
-#' Maternal perceived stress (mean across pregnancy)
-t.test(hs_inc$mean_cpss, hs_exc$mean_cpss)
-
-#' Maternal depression score (mean across pregnancy)
-t.test(hs_inc$mean_epsd, hs_exc$mean_epsd)
-
-#' Maternal pre-pregnancy BMI
-table(hs_data2$pre_preg_BMI_cat, hs_data2$include)
-chisq.test(hs_data2$pre_preg_BMI_cat, hs_data2$include)
-
-#' Maternal education
-table(hs_data2$maternal_ed, hs_data2$include)
-chisq.test(hs_data2$maternal_ed, hs_data2$include)
-pairwise.prop.test(table(hs_data2$maternal_ed, hs_data2$include))
-
-#' Past year household income
-table(hs_data2$HH_income, hs_data2$include)
-chisq.test(hs_data2$HH_income, hs_data2$include)
-pairwise.prop.test(table(hs_data2$HH_income, hs_data2$include))
-
-#' Smoking during preganacy
-table(hs_data2$any_smoker, hs_data2$include)
-chisq.test(hs_data2$any_smoker, hs_data2$include)
-
-#' SHS exposure during preganacy
-table(hs_data2$smokeSH, hs_data2$include)
-chisq.test(hs_data2$smokeSH, hs_data2$include)
-
-#' Infant sex
-table(hs_data2$infant_sex, hs_data2$include)
-chisq.test(hs_data2$infant_sex, hs_data2$include)
-
-#' Season of birth
-table(hs_data2$del_season, hs_data2$include)
-chisq.test(hs_data2$del_season, hs_data2$include)
-pairwise.prop.test(table(hs_data2$del_season, hs_data2$include))
-
-#' Gestational age (weeks)
-t.test(hs_inc$gest_age_w, hs_exc$gest_age_w)
-
-#' Term births
-table(hs_data2$term_cat, hs_data2$include)
-chisq.test(hs_data2$term_cat, hs_data2$include)
-pairwise.prop.test(table(hs_data2$del_season, hs_data2$include))
-
-#' birth_weight
-t.test(hs_inc$birth_weight, hs_exc$birth_weight)
-
-#' Low birth weight
-table(hs_data2$low_birth_weight, hs_data2$include)
-chisq.test(hs_data2$low_birth_weight, hs_data2$include)
-
-#' Body mass
-t.test(hs_inc$bm_g, hs_exc$bm_g)
-
-#' Fat mass
-t.test(hs_inc$fm_g, hs_exc$fm_g)
-
-#' Fat free mass
-t.test(hs_inc$ffm_g, hs_exc$ffm_g)
-
-#' Adiposity
-t.test(hs_inc$adiposity, hs_exc$adiposity)
-
-#' weight-for-length
-t.test(hs_inc$wfl_sex_z_score, hs_exc$wfl_sex_z_score)
-
+#' #' -----------------------------------------------------------------------------
+#' #' Compare included and excluded participants
+#' #' -----------------------------------------------------------------------------
+#' 
+#' #' Do geocoded HS participants with exposure data differ from those excluded?
+#' #' Chi square test for categorical variables, Student's t for continuous
+#' hs_inc <- filter(hs_data2, include == 1)
+#' hs_exc <- filter(hs_data2, include == 0)
+#' 
+#' #' Maternal race/ethnicity
+#' table(hs_data2$maternal_race_eth, hs_data2$include)
+#' chisq.test(hs_data2$maternal_race_eth, hs_data2$include)
+#' pairwise.prop.test(table(hs_data2$maternal_race_eth, hs_data2$include))
+#' 
+#' #' Maternal age at delivery
+#' t.test(hs_inc$maternal_age, hs_exc$maternal_age)
+#' 
+#' #' Maternal perceived stress (mean across pregnancy)
+#' t.test(hs_inc$mean_cpss, hs_exc$mean_cpss)
+#' 
+#' #' Maternal depression score (mean across pregnancy)
+#' t.test(hs_inc$mean_epsd, hs_exc$mean_epsd)
+#' 
+#' #' Maternal pre-pregnancy BMI
+#' table(hs_data2$pre_preg_BMI_cat, hs_data2$include)
+#' chisq.test(hs_data2$pre_preg_BMI_cat, hs_data2$include)
+#' 
+#' #' Maternal education
+#' table(hs_data2$maternal_ed, hs_data2$include)
+#' chisq.test(hs_data2$maternal_ed, hs_data2$include)
+#' pairwise.prop.test(table(hs_data2$maternal_ed, hs_data2$include))
+#' 
+#' #' Past year household income
+#' table(hs_data2$HH_income, hs_data2$include)
+#' chisq.test(hs_data2$HH_income, hs_data2$include)
+#' pairwise.prop.test(table(hs_data2$HH_income, hs_data2$include))
+#' 
+#' #' Smoking during preganacy
+#' table(hs_data2$any_smoker, hs_data2$include)
+#' chisq.test(hs_data2$any_smoker, hs_data2$include)
+#' 
+#' #' SHS exposure during preganacy
+#' table(hs_data2$smokeSH, hs_data2$include)
+#' chisq.test(hs_data2$smokeSH, hs_data2$include)
+#' 
+#' #' Infant sex
+#' table(hs_data2$infant_sex, hs_data2$include)
+#' chisq.test(hs_data2$infant_sex, hs_data2$include)
+#' 
+#' #' Season of birth
+#' table(hs_data2$del_season, hs_data2$include)
+#' chisq.test(hs_data2$del_season, hs_data2$include)
+#' pairwise.prop.test(table(hs_data2$del_season, hs_data2$include))
+#' 
+#' #' Gestational age (weeks)
+#' t.test(hs_inc$gest_age_w, hs_exc$gest_age_w)
+#' 
+#' #' Term births
+#' table(hs_data2$term_cat, hs_data2$include)
+#' chisq.test(hs_data2$term_cat, hs_data2$include)
+#' pairwise.prop.test(table(hs_data2$del_season, hs_data2$include))
+#' 
+#' #' birth_weight
+#' t.test(hs_inc$birth_weight, hs_exc$birth_weight)
+#' 
+#' #' Low birth weight
+#' table(hs_data2$low_birth_weight, hs_data2$include)
+#' chisq.test(hs_data2$low_birth_weight, hs_data2$include)
+#' 
+#' #' Body mass
+#' t.test(hs_inc$bm_g, hs_exc$bm_g)
+#' 
+#' #' Fat mass
+#' t.test(hs_inc$fm_g, hs_exc$fm_g)
+#' 
+#' #' Fat free mass
+#' t.test(hs_inc$ffm_g, hs_exc$ffm_g)
+#' 
+#' #' Adiposity
+#' t.test(hs_inc$adiposity, hs_exc$adiposity)
+#' 
+#' #' weight-for-length
+#' t.test(hs_inc$wfl_sex_z_score, hs_exc$wfl_sex_z_score)
+#' 
