@@ -262,7 +262,7 @@ I.e., is there a relationship between our exposures and gestational age?
 The DAG might look something like this:
 
 exposures ---> gestational age ---> birth weight
-     \_________________________________^
+     \ _________________________________^
 
 ## Scatter plots for exposures and gestational age
 
@@ -755,24 +755,22 @@ lm_results
 write_csv(lm_results, here::here("Results", "LM_Effects_Birth_Weight_v4.csv"))
 ```
 
-# Linear model with the ozone predictor
-
-The GAM model indicates a non-linear relationship between O3 and birth weight, None of the other exposures had a PIP > 0.5. 
-Remember that the exposure and covariates have all been scaled.
+# Linear model with the ozone and temperature predictors
 
 The standard deviation of the ```mean_o3``` variable is ```r round(sd(hs_data2$mean_o3),2)``` ppb
+The standard deviation of the ```mean_temp``` variable is ```r round(sd(hs_data2$mean_temp),2)``` degrees F
 
 ```{r}
 
-lm_df <- as.data.frame(cbind(Y, X.scaled[, "mean_o3"], W.scaled2))
+lm_df <- as.data.frame(cbind(Y, X.scaled[, c("mean_o3", "mean_temp")], W.scaled2))
 names(lm_df)
-names(lm_df)[2] <- "mean_o3"
+#names(lm_df)[2] <- "mean_o3"
 
 head(lm_df)
 ```
 
 ```{r}
-bw_lm <- lm(birth_weight ~ mean_o3 + 
+bw_lm <- lm(birth_weight ~ mean_o3 + mean_temp + mean_o3*mean_temp +
               lat + lon + lat_lon_int +
               latina_re + black_re + other_re + 
               ed_no_hs + ed_hs + ed_aa + ed_4yr + 
@@ -790,22 +788,27 @@ summary(bw_lm)
 plot(bw_lm)
 ```
 
-# Try a GAM with the ozone predictor
+# Try a GAM with the ozone and temperature predictor
 
-The NPB model above indicates that there might be a signal for ozone. None of the other exposures had a PIP > 0.5. Here I've got a GAM with a smoothing term for ozone to see about potential nonlinear effects
+The NPB model above indicates that there might be a signal for ozone. None of the other exposures had a PIP > 0.5. Here I've got a GAM with a smoothing term for ozone and temperature to see about potential nonlinear effects
+
+The mean and standard deviation of the ```mean_o3``` variable are ```r round(mean(hs_data2$mean_o3),2)``` (```r round(sd(hs_data2$mean_o3),2)```) ppb
+The mean and standard deviation of the ```mean_temp``` variable is ```r round(mean(hs_data2$mean_temp),2)``` (```r round(sd(hs_data2$mean_temp),2)```) degrees F
 
 ```{r}
 library(mgcv)
+library(tidymv)
 
-gam_df <- as.data.frame(cbind(Y, X.scaled[, "mean_o3"], W.scaled2))
+gam_df <- as.data.frame(cbind(Y, X.scaled[, c("mean_o3", "mean_temp")], W.scaled2))
 names(gam_df)
-names(gam_df)[2] <- "mean_o3"
+#names(gam_df)[2] <- "mean_o3"
 
 head(gam_df)
 ```
 
 ```{r}
-bw_gam <- gam(birth_weight ~ s(mean_o3) + 
+
+bw_gam <- gam(birth_weight ~ s(mean_o3, mean_temp) +
                 lat + lon + lat_lon_int +
                 latina_re + black_re + other_re + 
                 ed_no_hs + ed_hs + ed_aa + ed_4yr + 
@@ -815,15 +818,22 @@ bw_gam <- gam(birth_weight ~ s(mean_o3) +
                 maternal_age + any_smoker + smokeSH + 
                 mean_cpss + mean_epsd + male,
               data = gam_df, method = "REML")
-
+gam.check(bw_gam)
 summary(bw_gam)
+
+save(gam_df, bw_gam, file = here::here("Results", "BW_GAM_v4.rdata"))
 ```
 
 ```{r}
-jpeg(here::here("Figs", "Ozone_GAM_Birth_Weight_v4.jpeg"))
-plot(bw_gam, main = "GAM with a smoothing term for ozone",
-     xlab = "Ozone (scaled)", ylab = "Change in birth weight (g)")
-dev.off()
+
+library(mgcViz)
+gam_b <- getViz(bw_gam)
+plot(sm(gam_b, 1)) + 
+  l_fitRaster() + l_fitContour() + l_points() +
+  labs(title = NULL, x = "Ozone (scaled)", y = "Temperature (scaled)") +
+  guides(fill=guide_legend(title="Change in\nbirth weight (g)")) +
+ggsave(filename = here::here("Figs", "Ozone_Temp_GAM_Birth_Weight_v4.jpeg"),
+       device = "jpeg", width = 5, height = 3, units = "in", dpi = 500)  
 ```
 
 # GAM Sensitivity Analysis
@@ -832,27 +842,23 @@ The previous GAM suggested a possible nonlinear relationship between ozone and b
 
 Therefore, Ander suggested a sensitivity analysis where we excluded the top and bottom 2.5% of data and just use the middle 95%.
 
+
 ```{r}
 library(mgcv)
 
-quantile(X.scaled[,"mean_o3"], probs = c(0.025, 0.975))
-q_2.5 <- quantile(X.scaled[,"mean_o3"], probs = c(0.025))
-q_97.5 <- quantile(X.scaled[,"mean_o3"], probs = c(0.975))
-
-
-gam_df <- as.data.frame(cbind(Y, X.scaled[, "mean_o3"], W.scaled2))
+gam_df <- as.data.frame(cbind(Y, X.scaled[, c("mean_o3", "mean_temp")], W.scaled2))
 names(gam_df)
-names(gam_df)[2] <- "mean_o3"
-
 head(gam_df)
 
 gam_df2 <- gam_df %>%
-  filter(mean_o3 > q_2.5 & mean_o3 < q_97.5)
+  filter(mean_o3 > -2 & mean_o3 < 2) %>%
+  filter(mean_temp > -2 & mean_temp < 2)
 hist(gam_df2$mean_o3)
+hist(gam_df2$mean_temp)
 ```
 
 ```{r}
-bw_gam2 <- gam(birth_weight ~ s(mean_o3) + 
+bw_gam2 <- gam(birth_weight ~ s(mean_o3, mean_temp) + 
                 lat + lon + lat_lon_int +
                 latina_re + black_re + other_re + 
                 ed_no_hs + ed_hs + ed_aa + ed_4yr + 
@@ -862,59 +868,21 @@ bw_gam2 <- gam(birth_weight ~ s(mean_o3) +
                 maternal_age + any_smoker + smokeSH + 
                 mean_cpss + mean_epsd + male,
               data = gam_df2, method = "REML")
-
+gam.check(bw_gam2)
 summary(bw_gam2)
+
+save(gam_df2, bw_gam2, file = here::here("Results", "BW_GAM_Sensitivity_v4.rdata"))
 ```
 
 ```{r}
-jpeg(here::here("Figs", "Ozone_GAM_Birth_Weight_Sensitivity_v4.1.jpeg"))
-plot(bw_gam2, main = "GAM with a smoothing term for ozone",
-     xlab = "Ozone (scaled)", ylab = "Change in birth weight (g)")
-dev.off()
-```
-
-# GAM Sensitivity Analysis no. 2
-
-Going to try the middle 90% of data as well, just in case
-
-```{r}
-library(mgcv)
-
-quantile(X.scaled[,"mean_o3"], probs = c(0.05, 0.95))
-q_5 <- quantile(X.scaled[,"mean_o3"], probs = c(0.05))
-q_95 <- quantile(X.scaled[,"mean_o3"], probs = c(0.95))
-
-gam_df <- as.data.frame(cbind(Y, X.scaled[, "mean_o3"], W.scaled2))
-names(gam_df)
-names(gam_df)[2] <- "mean_o3"
-
-head(gam_df)
-
-gam_df3 <- gam_df %>%
-  filter(mean_o3 > q_5 & mean_o3 < q_95)
-hist(gam_df3$mean_o3)
-```
-
-```{r}
-bw_gam3 <- gam(birth_weight ~ s(mean_o3) + 
-                lat + lon + lat_lon_int +
-                latina_re + black_re + other_re + 
-                ed_no_hs + ed_hs + ed_aa + ed_4yr + 
-                low_bmi + ovwt_bmi + obese_bmi + 
-                concep_spring + concep_summer + concep_fall +
-                concep_2010 + concep_2011 + concep_2012 + concep_2013 +
-                maternal_age + any_smoker + smokeSH + 
-                mean_cpss + mean_epsd + male,
-              data = gam_df3, method = "REML")
-
-summary(bw_gam3)
-```
-
-```{r}
-jpeg(here::here("Figs", "Ozone_GAM_Birth_Weight_Sensitivity_v4.2.jpeg"))
-plot(bw_gam3, main = "GAM with a smoothing term for ozone",
-     xlab = "Ozone (scaled)", ylab = "Change in birth weight (g)")
-dev.off()
+library(mgcViz)
+gam_b2 <- getViz(bw_gam2)
+plot(sm(gam_b2, 1)) + 
+  l_fitRaster() + l_fitContour() + l_points() +
+  labs(title = NULL, x = "Ozone (scaled)", y = "Temperature (scaled)") +
+  guides(fill=guide_legend(title="Change in\nbirth weight (g)"))
+ggsave(filename = here::here("Figs", "Ozone_Temp_GAM_Birth_Weight_Sensitivity_v4.jpeg"),
+       device = "jpeg", width = 5, height = 3, units = "in", dpi = 500) 
 ```
 
 

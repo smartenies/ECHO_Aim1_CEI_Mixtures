@@ -4,6 +4,8 @@
 .Ruserdata
 
 # Ignore folders
+/Old_Code
+/Other_Code
 /Data
 /Figs
 /Literature
