@@ -4,11 +4,12 @@
 .Ruserdata
 
 # Ignore folders
-/Code/Old_Code
-/Code/Other_Code
+/Code/**
+/Code/**
 /Data
 /Figs
 /Literature
 /Manuscripts
 /Presentations
 /Results
+
